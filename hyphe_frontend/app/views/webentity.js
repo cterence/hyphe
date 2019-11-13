@@ -39,7 +39,6 @@ angular.module('hyphe.webentityController', [])
     //about ego Network...
     $scope.statuses = {in:true, out:false, undecided:true, discovered:false}
     $scope.types = {citing:true, cited:true, symmetric:true}
-    $scope.typeCite = true
     $scope.typesOfColor = ['status', 'citation type']
     $scope.colorBy = 'status'
 
@@ -54,15 +53,13 @@ angular.module('hyphe.webentityController', [])
 
     $scope.$on("$destroy", function(){
       $scope.ego = {};
-      $scope.layout.kill();
+      if ($scope.layout) $scope.layout.kill();
       $scope.loadAllPages = false
     })
 
 
     $scope.$watch('tagCategories', synchronizeTags, true)
-    $scope.$watch('statuses', updateNetwork, true)
-    $scope.$watch('types', updateNetwork, true)
-    $scope.$watch('colorBy', updateNetwork, true)
+    $scope.$watch('[statuses, types, colorBy]', buildEgoNetwork, true)
 
     $scope.enableEditMode = function(){
       $scope.webentityEdit_name = $scope.webentity.name
@@ -445,7 +442,6 @@ angular.module('hyphe.webentityController', [])
               $scope.ego.links = links
               $scope.ego.loading = false
               $scope.ego.loaded = true
-              $scope.status = {}
               loadEgoWebentities()
             }
             ,function(egonetwork, status, headers, config){
@@ -471,9 +467,8 @@ angular.module('hyphe.webentityController', [])
             light: true
           }
           , function (result) {
-            $scope.status = {}
+            $scope.status = {message: 'Building ego network'}
             $scope.ego.webentities = result
-            $scope.building = true
             buildEgoNetwork()
           }
           , function () {
@@ -531,7 +526,7 @@ angular.module('hyphe.webentityController', [])
 
       $scope.symmetricSet = $scope.citedSet.intersection($scope.citingSet);
       $scope.citedSet = $scope.citedSet.difference($scope.symmetricSet);
-      $scope.citingSet = $scope.citingSet.difference(($scope.symmetricSet));
+      $scope.citingSet = $scope.citingSet.difference($scope.symmetricSet);
 
 
       var weIndex = {}
@@ -556,18 +551,14 @@ angular.module('hyphe.webentityController', [])
 
       //Computing of citing/cited/symmetric
       $scope.ego.links.forEach(function(l) {
-        if (!weIndex[l[0]] || !weIndex[l[1]]){
+        if (!weIndex[l[0]] || !weIndex[l[1]])
           return;
-        }
-        else{
-
-          g.importEdge({
-            key: l[0] + '>' + l[1],
-            source: l[0],
-            target: l[1],
-            attributes: {count: l[2]}
-          })
-        }
+        g.importEdge({
+          key: l[0] + '>' + l[1],
+          source: l[0],
+          target: l[1],
+          attributes: {count: l[2]}
+        })
       })
 
       var averageNonNormalizedArea = g.size / g.order // because node area = indegree
@@ -590,8 +581,7 @@ angular.module('hyphe.webentityController', [])
             n.color = '#FAA'
           }
         }
-
-        if ($scope.colorBy === 'citation type'){
+        else if ($scope.colorBy === 'citation type'){
           if($scope.citedSet.has(n.id)){
             n.color = '#f3419c'
           }
@@ -602,8 +592,6 @@ angular.module('hyphe.webentityController', [])
             n.color = '#6e246c'
           }
         }
-
-
 
         // Size nodes by indegree
         // TODO: size by other means
@@ -623,45 +611,39 @@ angular.module('hyphe.webentityController', [])
       g.edges().forEach(function(eid){
         var e = g.getEdgeAttributes(eid)
         e.color = $mdColors.getThemeColor('default-background-100')
-        //e.color = '#666'
-
       })
 
       // Make the graph global for console tinkering
       window.g = g
       $scope.ego.network = g
       countEgoStatus()
-      $scope.building = false
     }
 
     function countEgoStatus(){
-        $scope.counts = {
-          in: 0
-          , undecided: 0
-          , out: 0
-          , discovered: 0
-          , citing: $scope.citingSet.size
-          , cited: $scope.citedSet.size
-          , symmetric: $scope.symmetricSet.size
+      $scope.counts = {
+        in: 0
+        , undecided: 0
+        , out: 0
+        , discovered: 0
+        , citing: $scope.citingSet.size
+        , cited: $scope.citedSet.size
+        , symmetric: $scope.symmetricSet.size
+      }
+      for (var i=0; i<$scope.ego.webentities.length; i++){
+        if ($scope.ego.webentities[i].status === "UNDECIDED"){
+          $scope.counts.undecided++;
         }
-        for (var i =0; i < $scope.ego.webentities.length; i++){
-          if ($scope.ego.webentities[i].status === "UNDECIDED"){
-            $scope.counts.undecided++;
-          }
-          if ($scope.ego.webentities[i].status === "OUT"){
-            $scope.counts.out++;
-          }
-          if ($scope.ego.webentities[i].status === "DISCOVERED"){
-            $scope.counts.discovered++;
-          }
-          if ($scope.ego.webentities[i].status === "IN"){
-            $scope.counts.in++;
-          }
+        else if ($scope.ego.webentities[i].status === "OUT"){
+          $scope.counts.out++;
         }
-    }
-
-    function updateNetwork() {
-      buildEgoNetwork()
+        else if ($scope.ego.webentities[i].status === "DISCOVERED"){
+          $scope.counts.discovered++;
+        }
+        else if ($scope.ego.webentities[i].status === "IN"){
+          $scope.counts.in++;
+        }
+      }
+      $scope.status = {}
     }
 
   })
